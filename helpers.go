@@ -9,7 +9,7 @@ import (
 
 func handleError(err error) {
 	if err != nil {
-		log.Printf("[error] err=%s\n", err, err)
+		log.Printf("[error] err=%s\n", err)
 		return
 	}
 }
@@ -47,8 +47,14 @@ func runCmdSetDir(command string, dir string) error {
 		return err
 	}
 	defer errFile.Close()
-	cmd.Stdout = outfile
-	//cmd.Stdout = log.Writer()
-	cmd.Stderr = errFile
-	return cmd.Run()
+	// cmd.Stdout = outfile
+	cmd.Stdout = log.Writer()
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+
+	if err != nil {
+		return err
+	}
+	return cmd.Wait()
+
 }

@@ -56,6 +56,8 @@ func (s *service) Start() {
 	log.Println("git listener started")
 	go s.pipeline.StartWorker()
 	log.Println("worker started")
+
+	go s.pipeline.notification.Start()
 }
 
 func (s *service) Stop() {
@@ -85,10 +87,15 @@ func (s service) handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	switch e := event.(type) {
 	case *github.PushEvent:
+		log.Println("push event triggered")
+		tracking := s.pipeline.db.GetBranch()
 
 		ref := *e.Ref
 		branch := ref[len("refs/heads/"):]
-		if branch == "master" { // todo: can set as arg branch set master
+
+		log.Println("tracking '" + tracking + "' branch, received from '" + branch + "' branch")
+
+		if branch == tracking {
 			s.pipeline.branch <- BranchUpdate{
 				Name: branch,
 				SHA:  *e.After,

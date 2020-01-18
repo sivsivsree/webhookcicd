@@ -6,6 +6,12 @@ import (
 	"strconv"
 )
 
+const (
+	repoName   = "repo"
+	branchName = "branch"
+	aws_ecr    = "aws_ecr"
+)
+
 type DB struct {
 	*leveldb.DB
 }
@@ -17,10 +23,6 @@ func NewDB() (error, *DB) {
 	}
 
 	return nil, &DB{db}
-}
-
-func (db *DB) GetRepoName() string {
-	return "dewa-test"
 }
 
 func (db *DB) LogON() string {
@@ -52,4 +54,34 @@ func (db *DB) BuildFinish() error {
 	}
 
 	return db.Put([]byte("buildNO"), buildNo, nil)
+}
+
+func (db *DB) SetRepo(repo string) error {
+	return db.Put([]byte(repoName), []byte(repo), nil)
+}
+
+func (db *DB) SetBranch(branch string) error {
+	return db.Put([]byte(branchName), []byte(branch), nil)
+}
+
+func (db *DB) SetECR(ecr string) error {
+	return db.Put([]byte(aws_ecr), []byte(ecr), nil)
+}
+
+func (db *DB) GetBranch() string {
+	branch, err := db.Get([]byte(branchName), nil)
+	handleErrorMsg("GetBranch", err)
+	return string(branch)
+}
+
+func (db *DB) GetRepoName() string {
+	branch, err := db.Get([]byte(repoName), nil)
+	handleErrorMsg("GetRepoName", err)
+	return string(branch)
+}
+
+func (db *DB) GetECR() string {
+	branch, err := db.Get([]byte(aws_ecr), nil)
+	handleErrorMsg("GetECR", err)
+	return string(branch)
 }

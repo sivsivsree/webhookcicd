@@ -13,6 +13,9 @@ func main() {
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	_, db := webhookcicd.NewDB()
+	_ = db.SetRepo("dewa-test")
+	_ = db.SetBranch("master")
+	_ = db.SetECR("670907057868.dkr.ecr.us-east-2.amazonaws.com/dewa-test")
 
 	_, srv := webhookcicd.NewServer()
 
