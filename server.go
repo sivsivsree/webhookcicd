@@ -21,11 +21,11 @@ type service struct {
 func NewServer() (error, *service) {
 
 	server := &http.Server{Addr: ":8080", Handler: nil}
-	return nil, &service{git: server, secret: []byte(""),}
+	return nil, &service{git: server, secret: []byte("")}
 
 }
-func (s *service) SetPipeline(db *DB, pipelineFile string) *service {
-	err, pline := newPipeline(db, pipelineFile)
+func (s *service) SetPipeline(db *DB) *service {
+	err, pline := newPipeline(db)
 	handleError(err)
 	s.pipeline = pline
 	return s
@@ -40,7 +40,7 @@ func (s *service) SetSecret(secret string) *service {
 }
 
 func (s *service) SetWorkDir() {
-	log.Println("Current working dir", WorkDir)
+	log.Println("current working dir", WorkDir)
 	handleErrorMsg("[NewServer]", os.MkdirAll(WorkDir, os.ModePerm))
 }
 
@@ -54,7 +54,7 @@ func (s *service) Start() {
 		log.Fatal(err)
 	}()
 	log.Println("git listener started")
-	go s.pipeline.Monit()
+	go s.pipeline.StartWorker()
 	log.Println("worker started")
 }
 

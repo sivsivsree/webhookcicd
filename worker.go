@@ -1,13 +1,9 @@
 package webhookcicd
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
-	"os/exec"
+	"strconv"
 )
 
 type BranchUpdate struct {
@@ -15,113 +11,103 @@ type BranchUpdate struct {
 	SHA  string
 }
 type pipeline struct {
-	file   string
 	branch chan BranchUpdate
 	db     *DB
 }
 
-func newPipeline(db *DB, file string) (error, *pipeline) {
+func newPipeline(db *DB) (error, *pipeline) {
 
-	if len(file) < 0 {
-		return errors.New("no pipeline script/file provided"), nil
-	}
 	b := make(chan BranchUpdate)
-	return nil, &pipeline{file: file, branch: b, db: db}
+	return nil, &pipeline{branch: b, db: db}
 
 }
 
-func (pp *pipeline) Run() {
-	ver := pp.db.GetBuildNo()
-
-	//handleError(pp.db.Put([]byte("buildNO"), buildNo, nil))
-
-	log.Println("Build Started")
-
-	src, err := ioutil.ReadFile(pp.file)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	src = bytes.ReplaceAll(src, []byte("${BUILD_NO}"), []byte(ver))
-
-	if err = ioutil.WriteFile("process.lock", src, 0666); err != nil {
-		log.Fatal(err)
-	}
-
-	cmd := exec.Command("/bin/sh", "process.lock")
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	// deleteFile("process.lock")
-	_ = pp.db.BuildFinish()
-	handleError(err)
-
-}
-
-func (pp *pipeline) Monit() {
+func (pp *pipeline) StartWorker() {
 	for {
 		select {
 		case bra := <-pp.branch:
 
 			ver := pp.db.GetBuildNo()
-			_ = pp.db.BuildFinish()
+			repoName := pp.db.GetRepoName()
+			if err := pp.db.BuildFinish(); err != nil {
+				log.Println(err)
+			}
 			log.Println(bra.Name, ver)
 
 			if err := prepareTheSource(); err != nil {
 				cleanTheSource()
 				log.Println(err)
+				return
 			}
 
-			buildTheImage()
-			pushTheImage()
+			if err := buildTheImage(repoName); err != nil {
+				cleanTheSource()
+				log.Println(err)
+				return
+			}
+
+			if err := pushTheImage(repoName, ver); err != nil {
+				cleanTheSource()
+				log.Println(err)
+				return
+			}
+
+			cleanTheSource()
 
 		}
 	}
 }
 
 func prepareTheSource() error {
-	log.Println(" Cloning the repositiory")
+	log.Println(" 🚀  Cloning the repositiory")
 	if err := runCmd("rm -rf *"); err != nil {
-		handleError(err)
-		return errors.New("repository clone failed, temp directory error")
+		return errors.New(" 👾  repository clone failed, temp directory error")
 	}
 
 	if err := runCmd("git clone git@github.com:grapetechadmin/dewa-test.git"); err != nil {
-		handleError(err)
-		return errors.New("clone from github failed with error :" + err.Error())
+		return errors.New(" 👾  clone from github failed with error :" + err.Error())
 	}
 
 	return nil
 
 }
 
-func buildTheImage() {
-	log.Println("Build the Image")
-	fmt.Println("docker build -t [dewa-ev]:latest .")
+func buildTheImage(repoName string) error {
+	log.Println(" 🚀  Building the repository to " + repoName + " latest")
+	if err := runCmdSetDir("docker build -t "+repoName+":latest .", WorkDir+"/"+repoName); err != nil {
+		handleError(err)
+		return errors.New(" 👾  docker build failed")
+	}
+	return nil
 }
 
-func pushTheImage() {
-	log.Println("Push the Image")
-	fmt.Println("docker tag [dewa-ev]:latest 670907057868.dkr.ecr.us-east-2.amazonaws.com/dewa-ev:${BUILD_NO}")
-	fmt.Println("docker push 670907057868.dkr.ecr.us-east-2.amazonaws.com/[dewa-ev]:${BUILD_NO}")
+func pushTheImage(repoName string, buildNo int) error {
+	log.Println(" 🚀  Push " + repoName + ":latest")
+
+	if err := runCmd("docker tag " + repoName + ":latest 670907057868.dkr.ecr.us-east-2.amazonaws.com/" + repoName + ":" + strconv.Itoa(buildNo)); err != nil {
+		handleError(err)
+		return errors.New(" 👾  docker tag failed, ")
+	}
+
+	log.Println(" 🚀  Tagged " + repoName + ":latest as  670907057868.dkr.ecr.us-east-2.amazonaws.com/" + repoName + ":" + strconv.Itoa(buildNo))
+
+	if err := runCmd("docker push 670907057868.dkr.ecr.us-east-2.amazonaws.com/" + repoName + ":" + strconv.Itoa(buildNo)); err != nil {
+		handleError(err)
+		return errors.New(" 👾  docker push failed")
+	}
+
+	log.Println(" 🚀  Pushed to registry 670907057868.dkr.ecr.us-east-2.amazonaws.com/" + repoName + ":" + strconv.Itoa(buildNo))
+	return nil
 }
 
 func cleanTheSource() {
-	log.Println("Clear the work dir")
-	err := runCmd("rm -rf *")
-	if err != nil {
+	log.Println(" 🚀  Clear the work dir")
+
+	if err := runCmd("rm -rf *"); err != nil {
 		handleError(err)
 	}
-}
 
-func runCmd(command string) error {
-	return runCmdSetDir(command, WorkDir)
-}
-
-func runCmdSetDir(command string, dir string) error {
-	cmd := exec.Command("/bin/sh", "-c", command)
-	cmd.Dir = dir
-	cmd.Stdout = log.Writer()
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := runCmd("docker rmi -f $(docker images -aq)"); err != nil {
+		handleError(err)
+	}
 }
