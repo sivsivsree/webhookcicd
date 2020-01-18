@@ -4,34 +4,58 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/go-github/github"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
+
+var WorkDir = os.TempDir() + "cicd"
 
 type service struct {
 	git      *http.Server
 	pipeline *pipeline
+	secret   []byte
 }
 
 func NewServer() (error, *service) {
+
 	server := &http.Server{Addr: ":8080", Handler: nil}
-	return nil, &service{git: server,}
+	return nil, &service{git: server, secret: []byte(""),}
 
 }
-func (s *service) SetPipeline(file string) *service {
-	err, pline := newPipeline(file)
+func (s *service) SetPipeline(db *DB, pipelineFile string) *service {
+	err, pline := newPipeline(db, pipelineFile)
 	handleError(err)
 	s.pipeline = pline
 	return s
 }
+
+func (s *service) SetSecret(secret string) *service {
+	if len(secret) < 0 {
+		log.Println("no secret for github hook provided")
+	}
+	s.secret = []byte(secret)
+	return s
+}
+
+func (s *service) SetWorkDir() {
+	log.Println("Current working dir", WorkDir)
+	handleErrorMsg("[NewServer]", os.MkdirAll(WorkDir, os.ModePerm))
+}
+
 func (s *service) Start() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook", s.handleWebhook)
 	s.git.Handler = mux
+
+	go func() {
+		err := s.git.ListenAndServe()
+		log.Fatal(err)
+	}()
 	log.Println("git listener started")
-	go s.git.ListenAndServe()
+	go s.pipeline.Monit()
+	log.Println("worker started")
 }
 
 func (s *service) Stop() {
@@ -45,9 +69,10 @@ func (s *service) Stop() {
 }
 
 func (s service) handleWebhook(w http.ResponseWriter, r *http.Request) {
-	payload, err := ioutil.ReadAll(r.Body)
+
+	payload, err := github.ValidatePayload(r, s.secret)
 	if err != nil {
-		log.Printf("error reading request body: err=%s\n", err)
+		log.Printf("error validating request body: err=%s\n", err)
 		return
 	}
 	defer r.Body.Close()
@@ -61,8 +86,17 @@ func (s service) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	switch e := event.(type) {
 	case *github.PushEvent:
 
-		s.pipeline.Run()
-		// this is a commit push, do something with it
+		ref := *e.Ref
+		branch := ref[len("refs/heads/"):]
+		if branch == "master" { // todo: can set as arg branch set master
+			s.pipeline.branch <- BranchUpdate{
+				Name: branch,
+				SHA:  *e.After,
+			}
+		}
+
+	case *github.PingEvent:
+
 	case *github.PullRequestEvent:
 		// this is a pull request, do something with it
 	case *github.WatchEvent:
@@ -73,9 +107,8 @@ func (s service) handleWebhook(w http.ResponseWriter, r *http.Request) {
 				*e.Sender.Login, *e.Repo.FullName)
 		}
 	default:
+		log.Printf("unknown WebHookType: %s, webhook-id: %s skipping\n", github.WebHookType(r), r.Header.Get("X-GitHub-Delivery"))
 
-		log.Printf("unknown event type %s\n", github.WebHookType(r))
-		s.pipeline.Run()
 		return
 	}
 }

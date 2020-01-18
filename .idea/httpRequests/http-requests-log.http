@@ -1,0 +1,16 @@
+POST http://localhost:8080/resources
+Accept: */*
+Cache-Control: no-cache
+
+<> 2020-01-18T014350.404.txt
+
+###
+
+GET http://localhost:8080/resources
+Accept: */*
+Cache-Control: no-cache
+
+<> 2020-01-18T014323.404.txt
+
+###
+
