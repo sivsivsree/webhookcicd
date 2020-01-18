@@ -1,10 +1,17 @@
 # webhookcicd
-CICD automation tool to test build and push the containers to AWS ECR registry.  
+ ### CICD automation tool to test build and push the containers to AWS ECR registry.  
 
-cicd --branch build --ver dev
-cicd ls
 
-cicd version : ver
-current branch : master
-build no : dev-x
-git : http://github.com/grapetechadmin/something
+ ```
+$> cicdserver set tracking http://github.com/grapetechadmin/something
+    OK
+ 
+$> cicd --branch build --ver dev
+    OK
+    
+$> cicd show
+   version : ver
+   current branch : master
+   current build no : dev-x
+   tracking : http://github.com/grapetechadmin/something
+```
