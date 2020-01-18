@@ -1,10 +1,7 @@
 package main
 
 import (
-	"flag"
 	"github.com/sivsivsree/webhookcicd"
-	"github.com/syndtr/goleveldb/leveldb"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,26 +9,20 @@ import (
 
 func main() {
 
-	var pipelineFile string
-	flag.StringVar(&pipelineFile, "script", "bash.siv", "file to run when event happens")
-	flag.Parse()
-
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	db, err := leveldb.OpenFile("siv", nil)
-	if err != nil {
-		log.Fatal("opening db -c", err)
-	}
+	_, db := webhookcicd.NewDB()
+
 	_, srv := webhookcicd.NewServer()
 
 	srv.SetWorkDir()
-	srv.SetPipeline(&webhookcicd.DB{DB: db}, pipelineFile)
-	srv.SetSecret("my-hook")
+	srv.SetPipeline(db)
+	srv.SetSecret(os.Getenv("SECRET"))
 	srv.Start()
 
 	<-done
 
-	db.Close()
+	_ = db.Close()
 	srv.Stop()
 }
