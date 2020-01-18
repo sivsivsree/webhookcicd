@@ -7,6 +7,8 @@ build:
 run:
 	SECRET=my-webhook go run cmd/webhookcicd/main.go
 
+proto:
+	protoc --proto_path=internal/proto  --go_out=plugins=grpc:internal client.proto
 
 distribute:
 	echo "Compiling for every OS and Platform"

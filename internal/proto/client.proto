@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package internal;
+
+message Config {
+    string Repo = 1;
+    string Branch = 2;
+    string ECR = 3;
+}
+
+message Response {
+    string client = 2;
+
+}
+service ConfigService {
+
+    rpc ChangeConfig (Config) returns (Config) {
+    };
+
+    rpc GetConfig (Config) returns (Config) {
+    };
+
+}
